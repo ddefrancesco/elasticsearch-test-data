@@ -97,6 +97,17 @@ def get_data_for_format(format):
         length = generate_count(min, max)
         return_val = "".join([random.choice(string.ascii_letters + string.digits) for x in range(length)])
 
+    elif field_type == "long":
+	return_val = generate_count(0,10000)
+
+    elif field_type == "http_code":
+	numberList=[200,201,301,302,400,401,403,404,405,500,502]
+	return_val = random.choice(numberList)
+
+    elif field_type == "http_url":
+	contexts=["billing","crm","numas","cake","jsag"]
+	return_value="https://apigw.kenamobile.it/".join(contexts)
+
     elif field_type == "int":
         min = 0 if len(split_f) < 3 else int(split_f[2])
         max = min + 100000 if len(split_f) < 4 else int(split_f[3])
