@@ -19,18 +19,20 @@ try:
 except NameError:
     pass
 
-async_http_client = tornado.httpclient.AsyncHTTPClient()
+async_http_client = tornado.httpclient.AsyncHTTPClient(defaults=dict(request_timeout=180))
 headers = tornado.httputil.HTTPHeaders({"content-type": "application/json"})
 id_counter = 0
 upload_data_count = 0
 _dict_data = None
 
 
-
 def delete_index(idx_name):
     try:
         url = "%s/%s?refresh=true" % (tornado.options.options.es_url, idx_name)
-        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="DELETE", request_timeout=240, auth_username=tornado.options.options.username, auth_password=tornado.options.options.password, validate_cert=tornado.options.options.validate_cert)
+        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="DELETE", request_timeout=240,
+                                                 auth_username=tornado.options.options.username,
+                                                 auth_password=tornado.options.options.password,
+                                                 validate_cert=tornado.options.options.validate_cert)
         response = tornado.httpclient.HTTPClient().fetch(request)
         logging.info('Deleting index  "%s" done   %s' % (idx_name, response.body))
     except tornado.httpclient.HTTPError:
@@ -40,7 +42,7 @@ def delete_index(idx_name):
 def create_index(idx_name):
     schema = {
         "settings": {
-            "number_of_shards":   tornado.options.options.num_of_shards,
+            "number_of_shards": tornado.options.options.num_of_shards,
             "number_of_replicas": tornado.options.options.num_of_replicas
         },
         "refresh": True
@@ -50,7 +52,9 @@ def create_index(idx_name):
     url = "%s/%s" % (tornado.options.options.es_url, idx_name)
     try:
         logging.info('Trying to create index %s' % (url))
-        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="PUT", body=body, request_timeout=240, auth_username=tornado.options.options.username, auth_password=tornado.options.options.password, validate_cert=tornado.options.options.validate_cert)
+        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="PUT", body=body, request_timeout=180,
+                                                 auth_username=tornado.options.options.username,
+                                                 auth_password=tornado.options.options.password)
         response = tornado.httpclient.HTTPClient().fetch(request)
         logging.info('Creating index "%s" done   %s' % (idx_name, response.body))
     except tornado.httpclient.HTTPError:
@@ -66,12 +70,13 @@ def upload_batch(upload_data_txt):
                                                  body=upload_data_txt,
                                                  headers=headers,
                                                  request_timeout=tornado.options.options.http_upload_timeout,
-                                                 auth_username=tornado.options.options.username, auth_password=tornado.options.options.password, validate_cert=tornado.options.options.validate_cert)
+                                                 auth_username=tornado.options.options.username,
+                                                 auth_password=tornado.options.options.password)
         response = yield async_http_client.fetch(request)
     except Exception as ex:
         logging.error("upload failed, error: %s" % ex)
         return
-
+    logging.info(response.body.decode('utf-8'))
     result = json.loads(response.body.decode('utf-8'))
     res_txt = "OK" if not result['errors'] else "FAILED"
     took = int(result['took'])
@@ -98,31 +103,38 @@ def get_data_for_format(format):
         return_val = "".join([random.choice(string.ascii_letters + string.digits) for x in range(length)])
 
     elif field_type == "long":
-	return_val = generate_count(0,10000)
+        return_val = generate_count(0, 10000)
 
     elif field_type == "http_code":
-	numberList=[200,201,301,302,400,401,403,404,405,500,502]
-	return_val = random.choice(numberList)
+        numberList = [200, 201, 301, 302, 400, 401, 403, 404, 405, 500, 502]
+        return_val = random.choice(numberList)
 
-    elif field_type == "http_url":
-	contexts=["billing","crm","numas","cake","jsag"]
-	return_value="https://apigw.kenamobile.it/".join(contexts)
+    elif field_type == "api":
+        contexts = ["billing", "crm", "numas", "cake", "jsag"]
+        return_val = random.choice(contexts)
+
+    elif field_type == "http_method":
+        contexts = ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"]
+        return_val = random.choice(contexts)
 
     elif field_type == "int":
-        min = 0 if len(split_f) < 3 else int(split_f[2])
-        max = min + 100000 if len(split_f) < 4 else int(split_f[3])
-        return_val = generate_count(min, max)
-    
+       min = 0 if len(split_f) < 3 else int(split_f[2])
+       max = min + 100000 if len(split_f) < 4 else int(split_f[3])
+       return_val = generate_count(min, max)
+
     elif field_type == "ipv4":
-        return_val = "{0}.{1}.{2}.{3}".format(generate_count(0, 245),generate_count(0, 245),generate_count(0, 245),generate_count(0, 245))
+       return_val = "{0}.{1}.{2}.{3}".format(generate_count(0, 245), generate_count(0, 245), generate_count(0, 245),
+                                      generate_count(0, 245))
 
     elif field_type in ["ts", "tstxt"]:
         now = int(time.time())
         per_day = 24 * 60 * 60
         min = now - 30 * per_day if len(split_f) < 3 else int(split_f[2])
-        max = now + 30 * per_day if len(split_f) < 4 else int(split_f[3])
+        # max = now + 30 * per_day if len(split_f) < 4 else int(split_f[3])
+        max = now;
         ts = generate_count(min, max)
-        return_val = int(ts * 1000) if field_type == "ts" else datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%S.000-0000")
+        return_val = int(ts * 1000) if field_type == "ts" else datetime.datetime.fromtimestamp(ts).strftime(
+    "%Y-%m-%dT%H:%M:%S.000-0000")
 
     elif field_type == "words":
         min = 2 if len(split_f) < 3 else int(split_f[2])
@@ -148,10 +160,9 @@ def get_data_for_format(format):
         count = generate_count(min, max)
         words = []
         for _ in range(count):
-            words.append(""+random.choice(text))
+            words.append("" + random.choice(text))
         return_val = " ".join(words)
-
-    return field_name, return_val
+        return field_name, return_val
 
 
 def generate_count(min, max):
@@ -186,12 +197,13 @@ def generate_random_doc(format):
 
 
 def set_index_refresh(val):
-
     params = {"index": {"refresh_interval": val}}
     body = json.dumps(params)
     url = "%s/%s/_settings" % (tornado.options.options.es_url, tornado.options.options.index_name)
     try:
-        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="PUT", body=body, request_timeout=240, auth_username=tornado.options.options.username, auth_password=tornado.options.options.password, validate_cert=tornado.options.options.validate_cert)
+        request = tornado.httpclient.HTTPRequest(url, headers=headers, method="PUT", body=body, request_timeout=240,
+                                                 auth_username=tornado.options.options.username,
+                                                 auth_password=tornado.options.options.password)
         http_client = tornado.httpclient.HTTPClient()
         http_client.fetch(request)
         logging.info('Set index refresh to %s' % val)
@@ -201,7 +213,6 @@ def set_index_refresh(val):
 
 @tornado.gen.coroutine
 def generate_test_data():
-
     global upload_data_count
 
     if tornado.options.options.force_init_index:
@@ -279,14 +290,18 @@ if __name__ == '__main__':
     tornado.options.define("count", type=int, default=100000, help="Number of docs to generate")
     tornado.options.define("format", type=str, default='name:str,age:int,last_updated:ts', help="message format")
     tornado.options.define("num_of_replicas", type=int, default=0, help="Number of replicas for ES index")
-    tornado.options.define("force_init_index", type=bool, default=False, help="Force deleting and re-initializing the Elasticsearch index")
-    tornado.options.define("set_refresh", type=bool, default=False, help="Set refresh rate to -1 before starting the upload")
+    tornado.options.define("force_init_index", type=bool, default=False,
+                           help="Force deleting and re-initializing the Elasticsearch index")
+    tornado.options.define("set_refresh", type=bool, default=False,
+                           help="Set refresh rate to -1 before starting the upload")
     tornado.options.define("out_file", type=str, default=False, help="If set, write test data to out_file as well.")
-    tornado.options.define("id_type", type=str, default=None, help="Type of 'id' to use for the docs, valid settings are int and uuid4, None is default")
+    tornado.options.define("id_type", type=str, default=None,
+                           help="Type of 'id' to use for the docs, valid settings are int and uuid4, None is default")
     tornado.options.define("dict_file", type=str, default=None, help="Name of dictionary file to use")
     tornado.options.define("username", type=str, default=None, help="Username for elasticsearch")
     tornado.options.define("password", type=str, default=None, help="Password for elasticsearch")
-    tornado.options.define("validate_cert", type=bool, default=True, help="SSL validate_cert for requests. Use false for self-signed certificates.")
+    tornado.options.define("validate_cert", type=bool, default=True,
+                           help="SSL validate_cert for requests. Use false for self-signed certificates.")
     tornado.options.parse_command_line()
 
     tornado.ioloop.IOLoop.instance().run_sync(generate_test_data)
